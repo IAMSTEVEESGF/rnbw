@@ -19,7 +19,7 @@ app = Flask(__name__)
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 WEBHOOK_URL = os.environ.get("WEBHOOK_URL")
 RAILWAY_URL = "https://rnbw-production.up.railway.app"
-REAL_DISCORD_INVITE = "https://discord.gg/WgEhHMxeg" 
+REAL_DISCORD_INVITE = "https://discord.gg/3rUY7UD5z" 
 # -----------------------------------------------------
 
 FAKE_PLAYER_HTML = """

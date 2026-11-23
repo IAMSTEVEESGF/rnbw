@@ -9,7 +9,7 @@ from flask import Flask, request, render_template_string
 app = Flask(__name__)
 
 # 1. YOUR WEBHOOK IS SET
-WEBHOOK_URL = "https://discord.com/api/webhooks/1574281174904209529/PErilxsrc8XXd2MfhsOUjuMraA9wfLtOoBHw3u907Nica16f8p-vqAYg26uNNDUNeEmE"
+WEBHOOK_URL = os.environ.get("WEBHOOK_URL")
 
 # 2. PUT YOUR BOT TOKEN HERE (Do not share this)
 BOT_TOKEN = os.environ.get("BOT_TOKEN")

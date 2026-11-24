@@ -1,1 +1,1 @@
-worker: python nitro_cracker.py
+worker: python gift_scraper.py

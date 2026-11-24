@@ -1,1 +1,1 @@
-worker: python gift_scraper.py
+worker: python username_sniper.py

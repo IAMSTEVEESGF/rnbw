@@ -12,12 +12,12 @@ TOKEN = os.getenv("DISCORD_TOKEN")
 LOG_CHANNEL_NAME = "scam-logs"
 
 KNOWN_SCAM_HASHES = []
-# Structure: {guild_id: {"enabled": True, "punishment": "timeout", "strikes": 3, "user_strikes": {user_id: count}}}
+DEFAULT_SETTINGS = {"enabled": False, "punishment": "timeout", "strikes": 3, "user_strikes": {}}
 guild_settings = {}
 
 intents = discord.Intents.default()
 intents.message_content = True 
-intents.members = True # Required for timeouts/bans
+intents.members = True 
 bot = commands.Bot(command_prefix="!", intents=intents)
 
 # --- HELPER FUNCTIONS ---
@@ -42,130 +42,114 @@ async def get_log_channel(guild):
         return None
 
 def parse_duration(duration_str: str):
-    """Parses strings like 10m, 2h, 28d into a timedelta."""
     match = re.match(r"(\d+)([smhd])", duration_str.lower())
     if not match:
         return None
     amount, unit = match.groups()
     amount = int(amount)
-    
-    if unit == 's':
-        return datetime.timedelta(seconds=amount)
-    elif unit == 'm':
-        return datetime.timedelta(minutes=amount)
-    elif unit == 'h':
-        return datetime.timedelta(hours=amount)
-    elif unit == 'd':
-        return datetime.timedelta(days=amount)
+    if unit == 's': return datetime.timedelta(seconds=amount)
+    elif unit == 'm': return datetime.timedelta(minutes=amount)
+    elif unit == 'h': return datetime.timedelta(hours=amount)
+    elif unit == 'd': return datetime.timedelta(days=amount)
     return None
 
 async def send_mod_log(guild, action: str, offender: discord.Member, moderator: discord.Member, duration: str = None, reason: str = "No reason provided"):
     log_channel = await get_log_channel(guild)
     if not log_channel:
         return
-
     bot_name = bot.user.name
-    if bot.user.discriminator != '0': 
-        bot_name = f"{bot.user.name}#{bot.user.discriminator}"
-        
+    if bot.user.discriminator != '0': bot_name = f"{bot.user.name}#{bot.user.discriminator}"
     mod_name = moderator.name if moderator else bot_name
 
     embed = discord.Embed(title=action, color=0xFAA61A) # Carl-bot orange
-    
     embed.add_field(name="Offender", value=f"{offender.name} {offender.mention}", inline=False)
-    if duration:
-        embed.add_field(name="Duration", value=duration, inline=False)
+    if duration: embed.add_field(name="Duration", value=duration, inline=False)
     embed.add_field(name="Reason", value=reason, inline=False)
     embed.add_field(name="Responsible moderator", value=mod_name, inline=False)
 
-    try:
-        await log_channel.send(embed=embed)
-    except discord.Forbidden:
-        pass
+    try: await log_channel.send(embed=embed)
+    except discord.Forbidden: pass
 
-# --- BOT EVENTS ---
+# --- THE AUTOMOD DASHBOARD UI ---
 
-@bot.event
-async def on_ready():
-    print(f"Logged in as {bot.user.name}. Security Bot is active.")
-    try:
-        synced = await bot.tree.sync()
-        print(f"Synced {len(synced)} slash commands.")
-    except Exception as e:
-        print(f"Failed to sync commands: {e}")
+def get_automod_embed(guild):
+    settings = guild_settings.get(guild.id, DEFAULT_SETTINGS)
     
-    folder_path = "."
-    if os.path.exists(folder_path):
-        for filename in os.listdir(folder_path):
-            if filename.lower().endswith(('.png', '.jpg', '.jpeg', '.webp')):
-                try:
-                    img = Image.open(os.path.join(folder_path, filename))
-                    KNOWN_SCAM_HASHES.append(imagehash.phash(img))
-                except Exception:
-                    pass
-    print(f"Loaded {len(KNOWN_SCAM_HASHES)} scam image hashes.")
+    status_text = "on" if settings["enabled"] else "off"
+    status_icon = "🟢" if settings["enabled"] else "🔴"
+    punish_text = "Ban" if settings["punishment"] == "ban" else "Timeout (28 Days)"
+    
+    embed = discord.Embed(
+        title="🛡️ Auto Mod",
+        description=f"Automod is **{status_text}** for **{guild.name}** {status_icon}\n\n"
+                    f"**Functions:**\n"
+                    f"• Image Scam Filter (MrBeast Crypto Scams)\n\n"
+                    f"**Current Settings:**\n"
+                    f"• **Punishment:** {punish_text}\n"
+                    f"• **Auto-Ban Strikes:** {settings['strikes']}",
+        color=discord.Color.green() if settings["enabled"] else discord.Color.red()
+    )
+    return embed
 
-# --- AUTOMOD COMMANDS ---
+class AutomodView(discord.ui.View):
+    def __init__(self, guild):
+        super().__init__(timeout=None)
+        self.guild = guild
 
-@bot.hybrid_group(name="automod", description="Configure the Automod settings.", invoke_without_command=True)
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if not interaction.user.guild_permissions.administrator:
+            await interaction.response.send_message("❌ You must be an **Administrator** to use this.", ephemeral=True)
+            return False
+        return True
+
+    @discord.ui.button(label="Toggle Status", style=discord.ButtonStyle.primary, row=1)
+    async def toggle_status(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if self.guild.id not in guild_settings:
+            guild_settings[self.guild.id] = DEFAULT_SETTINGS.copy()
+            guild_settings[self.guild.id]["user_strikes"] = {}
+            
+        guild_settings[self.guild.id]["enabled"] = not guild_settings[self.guild.id]["enabled"]
+        button.style = discord.ButtonStyle.success if guild_settings[self.guild.id]["enabled"] else discord.ButtonStyle.danger
+        await interaction.response.edit_message(embed=get_automod_embed(self.guild), view=self)
+
+    @discord.ui.button(label="Change Punishment", style=discord.ButtonStyle.secondary, row=1)
+    async def change_punish(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if self.guild.id not in guild_settings:
+            guild_settings[self.guild.id] = DEFAULT_SETTINGS.copy()
+            guild_settings[self.guild.id]["user_strikes"] = {}
+
+        current = guild_settings[self.guild.id]["punishment"]
+        guild_settings[self.guild.id]["punishment"] = "ban" if current == "timeout" else "timeout"
+        await interaction.response.edit_message(embed=get_automod_embed(self.guild), view=self)
+
+    @discord.ui.select(
+        placeholder="Set Ban Strikes...",
+        options=[
+            discord.SelectOption(label="1 Strike", value="1"),
+            discord.SelectOption(label="2 Strikes", value="2"),
+            discord.SelectOption(label="3 Strikes", value="3"),
+            discord.SelectOption(label="5 Strikes", value="5"),
+        ],
+        row=2
+    )
+    async def set_strikes(self, interaction: discord.Interaction, select: discord.ui.Select):
+        if self.guild.id not in guild_settings:
+            guild_settings[self.guild.id] = DEFAULT_SETTINGS.copy()
+            guild_settings[self.guild.id]["user_strikes"] = {}
+
+        guild_settings[self.guild.id]["strikes"] = int(select.values[0])
+        await interaction.response.edit_message(embed=get_automod_embed(self.guild), view=self)
+
+@bot.hybrid_command(name="automod", description="Open the Auto Mod configuration dashboard.")
 @commands.has_permissions(administrator=True)
 async def automod(ctx):
-    embed = discord.Embed(
-        title="Automod Configuration",
-        description="Use the subcommands to configure:\n"
-                    "`/automod toggle <on/off>`\n"
-                    "`/automod punishment <timeout/ban>`\n"
-                    "`/automod strikes <number>`",
-        color=discord.Color.blue()
-    )
-    await ctx.send(embed=embed)
+    if ctx.guild.id not in guild_settings:
+        guild_settings[ctx.guild.id] = DEFAULT_SETTINGS.copy()
+        guild_settings[ctx.guild.id]["user_strikes"] = {}
 
-@automod.command(name="toggle", description="Turn the scam image filter on or off.")
-async def automod_toggle(ctx, state: str):
-    gid = ctx.guild.id
-    if gid not in guild_settings:
-        guild_settings[gid] = {"enabled": False, "punishment": "timeout", "strikes": 3, "user_strikes": {}}
-        
-    if state.lower() == "on":
-        guild_settings[gid]["enabled"] = True
-        embed = discord.Embed(description="✅ **Scam Image Filter Enabled.**", color=discord.Color.green())
-    elif state.lower() == "off":
-        guild_settings[gid]["enabled"] = False
-        embed = discord.Embed(description="❌ **Scam Image Filter Disabled.**", color=discord.Color.red())
-    else:
-        embed = discord.Embed(description="Please use `on` or `off`.", color=discord.Color.orange())
-    await ctx.send(embed=embed)
+    await ctx.send(embed=get_automod_embed(ctx.guild), view=AutomodView(ctx.guild))
 
-@automod.command(name="punishment", description="Set what happens when a scam image is caught.")
-async def automod_punishment(ctx, action: str):
-    gid = ctx.guild.id
-    if gid not in guild_settings:
-        guild_settings[gid] = {"enabled": False, "punishment": "timeout", "strikes": 3, "user_strikes": {}}
-        
-    if action.lower() in ["timeout", "ban"]:
-        guild_settings[gid]["punishment"] = action.lower()
-        embed = discord.Embed(description=f"✅ **Punishment set to `{action.lower()}`.**", color=discord.Color.green())
-    else:
-        embed = discord.Embed(description="Please use `timeout` or `ban`.", color=discord.Color.orange())
-    await ctx.send(embed=embed)
-
-@automod.command(name="strikes", description="Ban user after X amount of deleted scam images.")
-async def automod_strikes(ctx, amount: int):
-    gid = ctx.guild.id
-    if gid not in guild_settings:
-        guild_settings[gid] = {"enabled": False, "punishment": "timeout", "strikes": 3, "user_strikes": {}}
-        
-    guild_settings[gid]["strikes"] = amount
-    embed = discord.Embed(description=f"✅ **User will be auto-banned if they reach `{amount}` scam strikes.**", color=discord.Color.green())
-    await ctx.send(embed=embed)
-
-# Error handler for automod commands
-@automod.error
-async def automod_error(ctx, error):
-    if isinstance(error, commands.MissingPermissions):
-        await ctx.send(embed=discord.Embed(description="❌ You must be an **Administrator** to use this.", color=discord.Color.red()), ephemeral=True)
-
-# --- TIMEOUT / REMOVE TIMEOUT COMMANDS ---
+# --- TIMEOUT COMMANDS ---
 
 @bot.hybrid_command(name="timeout", description="Timeout a member.")
 @commands.has_permissions(moderate_members=True)
@@ -173,7 +157,6 @@ async def timeout_cmd(ctx, member: discord.Member, duration: str, *, reason: str
     td = parse_duration(duration)
     if not td:
         return await ctx.send(embed=discord.Embed(description="❌ Invalid duration. Use `10m`, `1h`, `28d`.", color=discord.Color.red()), ephemeral=True)
-    
     if td > datetime.timedelta(days=28):
         return await ctx.send(embed=discord.Embed(description="❌ Discord max timeout is `28d`.", color=discord.Color.red()), ephemeral=True)
 
@@ -194,7 +177,26 @@ async def removetimeout_cmd(ctx, member: discord.Member, *, reason: str = "No re
     except discord.Forbidden:
         await ctx.send(embed=discord.Embed(description="❌ I cannot modify this user.", color=discord.Color.red()), ephemeral=True)
 
-# --- MESSAGE EVENT (AUTOMOD LOGIC) ---
+# --- BOT EVENTS & LOGIC ---
+
+@bot.event
+async def on_ready():
+    print(f"Logged in as {bot.user.name}. Security Bot is active.")
+    try:
+        synced = await bot.tree.sync()
+        print(f"Synced {len(synced)} slash commands.")
+    except Exception as e:
+        print(f"Failed to sync commands: {e}")
+    
+    folder_path = "."
+    if os.path.exists(folder_path):
+        for filename in os.listdir(folder_path):
+            if filename.lower().endswith(('.png', '.jpg', '.jpeg', '.webp')):
+                try:
+                    img = Image.open(os.path.join(folder_path, filename))
+                    KNOWN_SCAM_HASHES.append(imagehash.phash(img))
+                except Exception: pass
+    print(f"Loaded {len(KNOWN_SCAM_HASHES)} scam image hashes.")
 
 @bot.event
 async def on_message(message):
@@ -203,11 +205,8 @@ async def on_message(message):
 
     await bot.process_commands(message)
 
-    # Check if automod is enabled for this guild
-    settings = guild_settings.get(message.guild.id, {})
-    if not settings.get("enabled", False):
-        return
-    if not KNOWN_SCAM_HASHES:
+    settings = guild_settings.get(message.guild.id, DEFAULT_SETTINGS)
+    if not settings.get("enabled", False) or not KNOWN_SCAM_HASHES:
         return
 
     if message.attachments:
@@ -227,10 +226,8 @@ async def on_message(message):
 
 async def handle_scam(message, image_url, settings):
     # 1. Delete the message
-    try:
-        await message.delete()
-    except discord.Forbidden:
-        pass
+    try: await message.delete()
+    except discord.Forbidden: pass
 
     # 2. Track Strikes
     user_id = message.author.id
@@ -247,14 +244,12 @@ async def handle_scam(message, image_url, settings):
         try:
             await message.author.ban(reason="Auto-Mod: Posting known scam images.")
             await send_mod_log(message.guild, "ban", message.author, None, reason="hacked account (sent mr beast scam)")
-        except discord.Forbidden:
-            pass
+        except discord.Forbidden: pass
     else:
         try:
             duration = datetime.timedelta(days=28)
             await message.author.timeout(duration, reason="Auto-Mod: Posting known scam images.")
             await send_mod_log(message.guild, "timeout", message.author, None, duration="28 days", reason="hacked account (sent mr beast scam)")
-        except discord.Forbidden:
-            pass
+        except discord.Forbidden: pass
 
 bot.run(TOKEN)

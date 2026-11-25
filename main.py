@@ -19,7 +19,7 @@ guild_settings = {}
 
 intents = discord.Intents.default()
 intents.message_content = True 
-intents.members = True # Required for join alerts
+intents.members = True 
 bot = commands.Bot(command_prefix="!", intents=intents)
 
 # --- HELPER FUNCTIONS ---
@@ -61,14 +61,14 @@ def parse_duration(duration_str: str):
     elif unit == 'd': return datetime.timedelta(days=amount)
     return None
 
-async def send_mod_log(guild, action: str, offender: discord.Member, moderator: discord.Member, duration: str = None, reason: str = "No reason provided"):
+async def send_mod_log(guild, action: str, offender, moderator: discord.Member, duration: str = None, reason: str = "No reason provided"):
     log_channel = await get_log_channel(guild)
     if not log_channel: return
     bot_name = bot.user.name
     if bot.user.discriminator != '0': bot_name = f"{bot.user.name}#{bot.user.discriminator}"
     mod_name = moderator.name if moderator else bot_name
 
-    embed = discord.Embed(title=action, color=0xFAA61A)
+    embed = discord.Embed(title=action, color=0xFAA61A) # Carl-bot orange
     embed.add_field(name="Offender", value=f"{offender.name} {offender.mention}", inline=False)
     if duration: embed.add_field(name="Duration", value=duration, inline=False)
     embed.add_field(name="Reason", value=reason, inline=False)
@@ -90,10 +90,11 @@ def get_automod_embed(guild):
         description=f"Automod is **{status_text}** for **{guild.name}** {status_icon}\n\n"
                     f"**Functions:**\n"
                     f"• Image Scam Filter (Loaded: {len(KNOWN_SCAM_HASHES)} images)\n"
-                    f"• Text Spam Filter (# check my bio 😁)\n\n"
+                    f"• Text Spam Filter (Forced 28d Timeout)\n"
+                    f"• New Account Alerts (< 2 months old)\n\n"
                     f"**Current Settings:**\n"
-                    f"• **Punishment:** {punish_text}\n"
-                    f"• **Auto-Ban Strikes:** {settings['strikes']}",
+                    f"• **Image Punishment:** {punish_text}\n"
+                    f"• **Image Auto-Ban Strikes:** {settings['strikes']}",
         color=discord.Color.green() if settings["enabled"] else discord.Color.red()
     )
     return embed
@@ -116,7 +117,7 @@ class AutomodView(discord.ui.View):
         button.style = discord.ButtonStyle.success if guild_settings[self.guild.id]["enabled"] else discord.ButtonStyle.danger
         await interaction.response.edit_message(embed=get_automod_embed(self.guild), view=self)
 
-    @discord.ui.button(label="Change Punishment", style=discord.ButtonStyle.secondary, row=1)
+    @discord.ui.button(label="Change Image Punishment", style=discord.ButtonStyle.secondary, row=1)
     async def change_punish(self, interaction: discord.Interaction, button: discord.ui.Button):
         if self.guild.id not in guild_settings: guild_settings[self.guild.id] = DEFAULT_SETTINGS.copy()
         current = guild_settings[self.guild.id]["punishment"]
@@ -145,7 +146,6 @@ async def automod(ctx):
     await ctx.send(embed=get_automod_embed(ctx.guild), view=AutomodView(ctx.guild))
 
 # --- ADD SCAM IMAGES ---
-
 @bot.hybrid_command(name="addscam", description="Add a new custom image to the scam filter.")
 @commands.has_permissions(administrator=True)
 async def addscam(ctx, attachment: discord.Attachment = None):
@@ -164,7 +164,7 @@ async def addscam(ctx, attachment: discord.Attachment = None):
     except Exception as e:
         await ctx.send(embed=discord.Embed(description=f"❌ Failed to read image: {e}", color=discord.Color.red()), ephemeral=True)
 
-# --- TIMEOUT COMMANDS ---
+# --- MODERATION COMMANDS ---
 
 @bot.hybrid_command(name="timeout", description="Timeout a member.")
 @commands.has_permissions(moderate_members=True)
@@ -189,6 +189,22 @@ async def removetimeout_cmd(ctx, member: discord.Member, *, reason: str = "No re
         await send_mod_log(ctx.guild, "timeout removed", member, ctx.author, reason=reason)
     except discord.Forbidden:
         await ctx.send(embed=discord.Embed(description="❌ I cannot modify this user.", color=discord.Color.red()), ephemeral=True)
+
+@bot.hybrid_command(name="unban", description="Unban a user using their User ID.")
+@commands.has_permissions(ban_members=True)
+async def unban_cmd(ctx, user_id: str, *, reason: str = "No reason provided"):
+    try:
+        # Fetch the user object to get their name for the log
+        user = await bot.fetch_user(int(user_id))
+        await ctx.guild.unban(user, reason=reason)
+        await ctx.send(embed=discord.Embed(description=f"✅ Successfully unbanned **{user.name}**.", color=discord.Color.green()))
+        await send_mod_log(ctx.guild, "unban", user, ctx.author, reason=reason)
+    except ValueError:
+        await ctx.send(embed=discord.Embed(description="❌ Invalid User ID. Please make sure it's numbers only.", color=discord.Color.red()), ephemeral=True)
+    except discord.NotFound:
+        await ctx.send(embed=discord.Embed(description="❌ User is not banned or does not exist.", color=discord.Color.red()), ephemeral=True)
+    except discord.Forbidden:
+        await ctx.send(embed=discord.Embed(description="❌ I don't have permission to unban this user.", color=discord.Color.red()), ephemeral=True)
 
 # --- BOT EVENTS & LOGIC ---
 
@@ -219,14 +235,11 @@ async def on_ready():
 
 @bot.event
 async def on_member_join(member):
-    # Check if the account is less than 60 days old (2 months)
     account_age = discord.utils.utcnow() - member.created_at
     if account_age.days <= 60:
         log_channel = await get_log_channel(member.guild)
         if log_channel:
-            # Format the timestamp nicely for Discord
             timestamp = int(member.created_at.timestamp())
-            
             embed = discord.Embed(
                 title="⚠️ Suspicious Account Joined",
                 description=f"**User:** {member.name} {member.mention} (`{member.id}`)\n"
@@ -247,25 +260,16 @@ async def on_message(message):
     settings = guild_settings.get(message.guild.id, DEFAULT_SETTINGS)
     if not settings.get("enabled", False): return
 
-    # 1. TEXT FILTER (Check My Bio Spam)
+    # 1. TEXT FILTER (Hardcoded to 28d timeout)
     text_scam_pattern = re.compile(r"#\s*check\s+my\s+bio.*?😁", re.IGNORECASE)
     if text_scam_pattern.search(message.content):
         try:
             await message.delete()
-            # Apply punishment based on strikes
-            user_id = message.author.id
-            if user_id not in settings["user_strikes"]: settings["user_strikes"][user_id] = 0
-            settings["user_strikes"][user_id] += 1
-            
-            if settings["user_strikes"][user_id] >= settings["strikes"] or settings["punishment"] == "ban":
-                await message.author.ban(reason="Auto-Mod: Text Scam Spam")
-                await send_mod_log(message.guild, "ban", message.author, None, reason="hacked account (sent text scam)")
-            else:
-                await message.author.timeout(datetime.timedelta(days=28), reason="Auto-Mod: Text Scam Spam")
-                await send_mod_log(message.guild, "timeout", message.author, None, duration="28 days", reason="hacked account (sent text scam)")
-        except discord.Forbidden:
-            pass
-        return # Stop checking other things if it's a text scam
+            # Ignoring strikes/settings, forcing a 28 day timeout
+            await message.author.timeout(datetime.timedelta(days=28), reason="Auto-Mod: Text Scam Spam")
+            await send_mod_log(message.guild, "timeout", message.author, None, duration="28 days", reason="hacked account (sent text scam)")
+        except discord.Forbidden: pass
+        return 
 
     # 2. IMAGE FILTER
     if message.attachments and KNOWN_SCAM_HASHES:
@@ -290,11 +294,7 @@ async def handle_scam_image(message, image_url, settings):
     if user_id not in settings["user_strikes"]: settings["user_strikes"][user_id] = 0
     settings["user_strikes"][user_id] += 1
     
-    strikes = settings["user_strikes"][user_id]
-    punishment = settings["punishment"]
-    max_strikes = settings["strikes"]
-
-    if strikes >= max_strikes or punishment == "ban":
+    if settings["user_strikes"][user_id] >= settings["strikes"] or settings["punishment"] == "ban":
         try:
             await message.author.ban(reason="Auto-Mod: Posting known scam images.")
             await send_mod_log(message.guild, "ban", message.author, None, reason="hacked account (sent mr beast scam)")

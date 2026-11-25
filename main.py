@@ -8,7 +8,7 @@ import datetime
 
 # --- CONFIGURATION ---
 TOKEN = os.getenv("DISCORD_TOKEN") 
-LOG_CHANNEL_NAME = "scam-logs" # The bot will create/find this channel automatically
+LOG_CHANNEL_NAME = "scam-logs"
 
 KNOWN_SCAM_HASHES = []
 
@@ -16,32 +16,42 @@ intents = discord.Intents.default()
 intents.message_content = True 
 bot = commands.Bot(command_prefix="!", intents=intents)
 
-# Helper function to find or create the log channel
-async def get_or_create_log_channel(guild):
-    # Look for the channel
+# Helper function to find, create, or fallback to a log channel
+async def get_log_channel(guild):
+    # 1. Try to find the channel
     channel = discord.utils.get(guild.text_channels, name=LOG_CHANNEL_NAME)
     if channel:
         return channel
     
-    # If it doesn't exist, create it
+    # 2. Try to create it if it doesn't exist
     try:
-        # Create the channel, hidden from everyone except admins and the bot
         overwrites = {
             guild.default_role: discord.PermissionOverwrite(read_messages=False),
             guild.me: discord.PermissionOverwrite(read_messages=True, send_messages=True)
         }
         channel = await guild.create_text_channel(LOG_CHANNEL_NAME, overwrites=overwrites)
-        print(f"✅ Created new log channel: {LOG_CHANNEL_NAME}")
+        print(f"✅ Created new log channel: {LOG_CHANNEL_NAME} in {guild.name}")
         return channel
     except discord.Forbidden:
-        print(f"❌ Missing permissions to create #{LOG_CHANNEL_NAME} channel in {guild.name}. Please check bot permissions.")
+        print(f"⚠️ Missing permissions to create channel in {guild.name}. Falling back to default channel.")
+        
+        # 3. FALLBACK: If we can't create a channel, find the system channel
+        if guild.system_channel and guild.system_channel.permissions_for(guild.me).send_messages:
+            return guild.system_channel
+            
+        # 4. SECOND FALLBACK: Find ANY channel we are allowed to type in
+        for c in guild.text_channels:
+            if c.permissions_for(guild.me).send_messages:
+                return c
+                
+        # 5. If all else fails, we can't log it in the server.
+        print(f"❌ Cannot find any channel to send logs in {guild.name}.")
         return None
 
 @bot.event
 async def on_ready():
     print(f"Logged in as {bot.user.name}. Security Bot is active.")
     
-    # 1. Load images
     folder_path = "."
     print("Loading scam images and generating hashes...")
     
@@ -59,9 +69,9 @@ async def on_ready():
                     
     print(f"Loaded {len(KNOWN_SCAM_HASHES)} scam image hashes. Ready to protect the server.")
 
-    # 2. Check/Create log channel in all servers the bot is in
+    # Check/Create log channel in all servers on startup
     for guild in bot.guilds:
-        await get_or_create_log_channel(guild)
+        await get_log_channel(guild)
 
 @bot.event
 async def on_message(message):
@@ -104,8 +114,8 @@ async def handle_scam(message, image_url):
     except discord.Forbidden:
         print("Missing permissions to timeout user.")
 
-    # 3. Log to mod channel
-    log_channel = await get_or_create_log_channel(message.guild)
+    # 3. Log to mod channel (using the new fallback function)
+    log_channel = await get_log_channel(message.guild)
     
     if log_channel:
         embed = discord.Embed(
@@ -118,7 +128,7 @@ async def handle_scam(message, image_url):
         try:
             await log_channel.send(embed=embed)
         except discord.Forbidden:
-            print(f"❌ Cannot send messages in {log_channel.name}. Check permissions.")
+            print(f"❌ Cannot send messages in #{log_channel.name}. Check permissions.")
 
 # Run the bot
 bot.run(TOKEN)

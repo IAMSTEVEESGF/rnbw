@@ -11,15 +11,12 @@ TOKEN = os.getenv("DISCORD_TOKEN")
 LOG_CHANNEL_NAME = "scam-logs"
 
 KNOWN_SCAM_HASHES = []
-
-# Dictionary to keep track of which servers have the protection turned on
 guild_settings = {}
 
 intents = discord.Intents.default()
 intents.message_content = True 
 bot = commands.Bot(command_prefix="!", intents=intents)
 
-# Helper function to find, create, or fallback to a log channel
 async def get_log_channel(guild):
     channel = discord.utils.get(guild.text_channels, name=LOG_CHANNEL_NAME)
     if channel:
@@ -43,6 +40,12 @@ async def get_log_channel(guild):
 async def on_ready():
     print(f"Logged in as {bot.user.name}. Security Bot is active.")
     
+    try:
+        synced = await bot.tree.sync()
+        print(f"Synced {len(synced)} slash commands.")
+    except Exception as e:
+        print(f"Failed to sync commands: {e}")
+    
     folder_path = "."
     print("Loading scam images and generating hashes...")
     
@@ -63,34 +66,44 @@ async def on_ready():
     for guild in bot.guilds:
         await get_log_channel(guild)
 
-# --- THE TOGGLE COMMAND ---
-@bot.command()
-@commands.has_permissions(administrator=True) # Only admins can turn it on/off
-async def mrbeast(ctx, state: str = None):
+# --- THE COMMAND (WORKS AS !imagescam AND /imagescam) ---
+@bot.hybrid_command(name="imagescam", description="Enable or disable the automated scam image filter.")
+@commands.has_permissions(administrator=True)
+async def imagescam(ctx, state: str):
     guild_id = ctx.guild.id
-    
-    if state is None:
-        await ctx.reply("Usage: `!mrbeast on` or `!mrbeast off`")
-        return
+    embed = discord.Embed()
 
     if state.lower() == "on":
         guild_settings[guild_id] = True
-        await ctx.reply("✅ **MrBeast Scam Protection is now ON.** I will delete and mute anyone posting the scam images.")
+        embed.description = "✅ **Scam Protection Enabled.** The bot will now automatically delete matching scam images and timeout the users who post them."
+        embed.color = discord.Color.green()
     elif state.lower() == "off":
         guild_settings[guild_id] = False
-        await ctx.reply("❌ **MrBeast Scam Protection is now OFF.**")
+        embed.description = "❌ **Scam Protection Disabled.** The bot will no longer monitor for these images."
+        embed.color = discord.Color.red()
     else:
-        await ctx.reply("Please use `!mrbeast on` or `!mrbeast off`")
+        embed.description = "Invalid option. Please use `/imagescam on` or `/imagescam off`."
+        embed.color = discord.Color.orange()
+        
+    await ctx.send(embed=embed)
+
+@imagescam.error
+async def imagescam_error(ctx, error):
+    if isinstance(error, commands.MissingPermissions):
+        embed = discord.Embed(
+            description="❌ You must be an **Administrator** to use this command.",
+            color=discord.Color.red()
+        )
+        # Ephemeral makes it so only the user who typed it sees the error
+        await ctx.send(embed=embed, ephemeral=True)
 
 @bot.event
 async def on_message(message):
     if message.author.bot or not message.guild:
         return
 
-    # Check if the command was used
     await bot.process_commands(message)
 
-    # Check if protection is enabled for this server (Default is False if they haven't used the command yet)
     if not guild_settings.get(message.guild.id, False):
         return
 
@@ -113,35 +126,41 @@ async def on_message(message):
                     print(f"Error processing image: {e}")
 
 async def handle_scam(message, image_url):
-    # 1. Delete
+    # 1. Delete the message
     try:
         await message.delete()
     except discord.Forbidden:
         print("Missing permissions to delete message.")
 
-    # 2. Timeout (Mute)
+    # 2. Timeout the user (28 days)
     try:
         duration = datetime.timedelta(days=28)
         await message.author.timeout(duration, reason="Auto-Mod: Posting known scam images.")
     except discord.Forbidden as e:
-        print(f"❌ MUTE FAILED: {e}. The bot's role is likely lower than the user's role, or it lacks the 'Moderate Members' permission.")
-    except Exception as e:
-         print(f"❌ MUTE FAILED: {e}")
+        print(f"❌ TIMEOUT FAILED: {e}. The bot's role is likely lower than the user's role, or it lacks the 'Moderate Members' permission.")
 
-    # 3. Log
+    # 3. Send Custom Log Embed
     log_channel = await get_log_channel(message.guild)
     if log_channel:
+        # Get bot name for the "Responsible moderator" field
+        bot_name = bot.user.name
+        if bot.user.discriminator != '0': 
+            bot_name = f"{bot.user.name}#{bot.user.discriminator}"
+
+        # Recreating the format from your screenshot
         embed = discord.Embed(
-            title="🚨 Scam Image Detected & User Muted (28 Days)",
-            description=f"**User:** {message.author.mention} ({message.author.id})\n**Channel:** {message.channel.mention}\n**Action Taken:** Message deleted, user timed out for 28 days.\n\n*Please review and issue a permanent ban if necessary.*",
-            color=discord.Color.red()
+            title="timeout",
+            color=0xFAA61A # A nice orange/yellow to match the screenshot
         )
-        embed.set_thumbnail(url=image_url)
         
+        embed.add_field(name="Offender", value=f"{message.author.name} {message.author.mention}", inline=False)
+        embed.add_field(name="Duration", value="28 days", inline=False)
+        embed.add_field(name="Reason", value="hacked account (sent mr beast scam)", inline=False)
+        embed.add_field(name="Responsible moderator", value=bot_name, inline=False)
+
         try:
             await log_channel.send(embed=embed)
         except discord.Forbidden:
              print(f"❌ Cannot send messages in #{log_channel.name}. Check permissions.")
 
-# Run the bot
 bot.run(TOKEN)

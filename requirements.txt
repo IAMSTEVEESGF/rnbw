@@ -1,4 +1,3 @@
-requests
-httpagentparser
-cryptography
-fernet
+aiohttp
+aiohttp-socks
+colorama

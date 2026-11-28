@@ -21,11 +21,13 @@ async def join_server(session, alt_token, invite_code):
     }
 
     try:
-        async with session.post(url, headers=headers) as resp:
+        # The empty json={} payload is required to bypass the 50109 invalid JSON error
+        async with session.post(url, headers=headers, json={}) as resp:
             if resp.status == 200:
                 return True, "Joined successfully"
             elif resp.status == 429:
-                return False, "Rate limited"
+                retry = (await resp.json()).get("retry_after", 5)
+                return False, f"Rate limited. Wait {retry}s"
             else:
                 return False, f"Failed: {resp.status} - {await resp.text()}"
     except Exception as e:
@@ -34,6 +36,7 @@ async def join_server(session, alt_token, invite_code):
 @bot.event
 async def on_ready():
     print(f"[*] Logged in as {bot.user}")
+    print(f"[*] Loaded {len(ALT_TOKENS)} alt tokens.")
 
 @bot.command(name="join")
 async def join_cmd(ctx, invite_code: str):
@@ -53,11 +56,12 @@ async def join_cmd(ctx, invite_code: str):
             
             if joined:
                 success += 1
+                print(f"[+] Success: {alt_token[:15]}...")
             else:
                 failed += 1
                 print(f"[-] Failed: {result}")
                 
-            # Delay to avoid instant ban
+            # 2 second delay to prevent instant ban
             await asyncio.sleep(2.0)
 
     embed = discord.Embed(title="✅ Join Complete", color=discord.Color.green())

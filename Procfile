@@ -1,1 +1,1 @@
-worker: python mass_reporter.py
+worker: python bot.py
